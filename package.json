@@ -1,0 +1,24 @@
+{
+  "name": "theprison2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dan1alaq1b/theprison2.git"
+  },
+  "author": "danial",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dan1alaq1b/theprison2/issues"
+  },
+  "homepage": "https://github.com/dan1alaq1b/theprison2#readme",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongodb": "^6.3.0",
+    "node.js": "^0.0.1-security"
+  }
+}
