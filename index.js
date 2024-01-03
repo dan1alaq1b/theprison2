@@ -669,5 +669,44 @@ app.delete('/delete/visitor', async (req, res) => {
 })
 
 app.listen(port, () => {
-	console.log(`Example app listening at http://localhost:${port}`)
-})
+  console.log(`Example app listening on port ${port}`);
+});
+
+app.post('/create/customer/admin', verifyToken, async (req, res) => {
+  let result = createcustomer(
+    req.body.customername,
+    req.body.idproof
+  ); 
+  res.send(result);
+});
+
+app.post('/add/sensor',async(req,res)=>{
+  let result = addsensor(
+    req.body.sensor,
+    req.body.date,
+    req.body.time,
+    req.body.value,
+    req.body.id,
+    req.body.name
+  );
+  res.send(result) 
+});
+
+function addsensor(reqsensor, reqdate, reqtime, reqvalue, reqname, reqidproof) {
+  client.db().collection().insertMany({
+      "sensor": reqsensor,
+      "date": reqdate,
+      "time": reqtime,
+      "value": reqvalue,
+      "name": reqname,
+      "id": reqidproof
+
+    });
+    return "sensor added";
+  }
+
+app.patch('/update/value/:id',async(req,res)=>{
+  const search = req.params.id;
+  const value = req.body.value;
+  await client.db().collection().updateOne({id: search},{$set:value});
+}) 
