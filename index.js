@@ -1,277 +1,673 @@
-const express = require('express');
-const app = express();
-const port = 3002;
-app.use(express.json());
-
-//connect to mongodb
-const { MongoClient, ServerApiVersion } = require('mongodb');
-const uri = "mongodb+srv://danial:779hRsy0RVMRRRlP@gulag0.ij0pzbn.mongodb.net/?retryWrites=true&w=majority";
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  }
-});
-
-client.connect().then(res => {
-  console.log(res);
-});
-
-//admin configuration
-app.post('/login/admin', (req, res) => {
-  console.log(req.body);
-  login(req.body.username, req.body.password)
-    .then(result => {
-      if (result.message === 'Correct password') {
-        const token = generateToken({ username: req.body.username });
-        res.send({ message: 'Successful login', token });
-      } else {
-        res.send('Login unsuccessful');
-      }
-    })
-    .catch(error => {
-      console.error(error);
-      res.status(500).send("Internal Server Error");
-    });
-});
-
-async function login(reqUsername, reqPassword) {
-  let matchUser = await client.db('cybercafe').collection('admin').findOne({ username: { $eq: reqUsername } });
-
-  if (!matchUser)
-    return { message: "User not found!" };
-
-  if (matchUser.password === reqPassword)
-    return { message: "Correct password", user: matchUser };
-  else
-    return { message: "Invalid password" };
-}
-
-//customer configuration
-app.get('/view/customer/admin', verifyToken, async (req, res) => {
-  try {
-    const result = await client
-      .db('cybercafe')
-      .collection('customer')
-      .find()
-      .toArray();
-
-    res.send(result);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-
-app.post('/create/customer/admin', verifyToken, async (req, res) => {
-  let result = createcustomer(
-    req.body.customername,
-    req.body.idproof
-  ); 
-  res.send(result);
-});
-
-app.delete('/delete/customer/:idproof', verifyToken, async (req, res) => {
-  const idproof = req.params.idproof;
-
-  try {
-    const deletecustomerResult = await client
-      .db('cybercafe')
-      .collection('customer')
-      .deleteOne({ idproof: idproof});
-
-    if (deletecustomerResult.deletedCount === 0) {
-      return res.status(404).send('customer not found or unauthorized');
-    }
-
-    res.send('customer deleted successfully');
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Internal Server Error');
-  }
-});
-app.put('/update/customer/:idproof', verifyToken, async (req, res) => {
-  const idproof = req.params.idproof;
-  const { cabinno, entrytime, payment, timespend} = req.body;
-  
-
-  try {
-    const updatecustomerResult = await client
-      .db('cybercafe').collection('customer').updateOne({idproof},
-        { $set: { cabinno, entrytime, payment, timespend} }
-      );
-
-    if (updatecustomerResult.modifiedCount === 0) {
-      return res.status(404).send('customer not found or unauthorized');
-    }
-
-    res.send('customer updated successfully');
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Internal Server Error');
-  }
-});
+const MongoClient = require("mongodb").MongoClient;
+const User = require("./user");
+const Visitor = require("./visitor.js");
+const Inmate = require("./inmate");
+const Visitorlog = require("./visitorlog")
 
 
-function createcustomer(reqcustomername, reqidproof, reqentrytime = 0, reqcabin = 0, reqpayment = 0, reqtimespend = 0) {
-client.db('cybercafe').collection('customer').insertOne({
-    "customername": reqcustomername,
-    "idproof": reqidproof,
-    "cabinno": reqcabin,
-    "entrytime": reqentrytime,
-    "payment": reqpayment,
-    "timespend": reqtimespend
-  });
-  return "customer created";
-}
-//computer configuration
-function createcomputer(reqcomputername, reqcabinno, reqLanportno, reqsystemworking, reqAvailable) {
-  client.db('configure').collection('computer').insertOne({
+MongoClient.connect(
+	// TODO: Connection 
+	//"mongodb+srv://m001-student:Dan_2218@sandbox.yldg8.mongodb.net/    ", 
+	"mongodb+srv://danial:779hRsy0RVMRRRlP@gulag0.ij0pzbn.mongodb.net/?retryWrites=true&w=majority",
+	{ useNewUrlParser: true },
+).catch(err => {
+	console.error(err.stack)
+	process.exit(1)
+}).then(async client => {
+	console.log('Connected to MongoDB');
+	User.injectDB(client);
+	Visitor.injectDB(client);
+	Inmate.injectDB(client);
+	Visitorlog.injectDB(client);
+})
 
-      "computername": reqcomputername,
-      "cabinno": reqcabinno,
-      "lanportno": reqLanportno,
-      "systemworking": reqsystemworking,
-      "available": reqAvailable
-    });
-    return "computer added";
-  }
-  app.post('/create/computer/admin', verifyToken, async (req, res) => {
-    let result = createcomputer(
-      req.body.computername,
-      req.body.cabinno,
-      req.body.lanportno,
-      req.body.systemworking,
-      req.body.available
-    ); 
-    res.send(result);
-  });
+const express = require('express')
+const app = express()
+const port = process.env.PORT || 3030
 
-  app.get('/view/computer/admin', verifyToken, async (req, res) => {
-    try {
-      const result = await client
-      .db('configure').collection('computer').find().toArray();
-  
-      res.send(result);
-    } catch (error) {
-      console.error(error);
-      res.status(500).send("Internal Server Error");
-    }
-  });
-
-  app.delete('/delete/computer/:computername', verifyToken, async (req, res) => {
-    const computername = req.params.computername;
-  
-    try {
-      const deletecomputerResult = await client
-        .db('configure')
-        .collection('computer')
-        .deleteOne({ computername:computername});
-  
-      if (deletecomputerResult.deletedCount === 0) {
-        return res.status(404).send('computer not found or unauthorized');
-      }
-  
-      res.send('computer deleted successfully');
-    } catch (error) {
-      console.error(error);
-      res.status(500).send('Internal Server Error');
-    }
-  });
-  app.put('/update/computer/:computername', verifyToken, async (req, res) => {
-    const computername = req.params.computername;
-    const { lanportno,systemworking,available} = req.body;
-  
-    try {
-      const updatecomputerResult = await client
-        .db('configure')
-        .collection('computer')
-        .updateOne({computername},
-          { $set: { lanportno, systemworking, available}});
-  
-      if (updatecomputerResult.modifiedCount === 0) {
-        return res.status(404).send('computer not found or unauthorized');
-      }
-  
-      res.send('computer updated successfully');
-    } catch (error) {
-      console.error(error);
-      res.status(500).send('Internal Server Error');
-    }
-  });
-//token function
-const jwt = require('jsonwebtoken');
-
-function generateToken(userData) {
-  const token = jwt.sign(
-    userData,
-    'password',
-    {expiresIn: 600}
-  );
-
-  console.log(token);
-  return token;
+const jwt = require ('jsonwebtoken');
+function generateAccessToken(payload){
+	return jwt.sign(payload, "secretcode", { expiresIn: '7d' });
 }
 
 function verifyToken(req, res, next) {
-  let header = req.headers.authorization;
-  if (!header) {
-    res.status(401).send('Unauthorized');
-    return;
-  }
+	const authHeader = req.headers['authorization']
+	const token = authHeader && authHeader.split(' ')[1]
 
-  let token = header.split(' ')[1];
+	if (token == null) return res.sendStatus(401)
 
-  jwt.verify(token, 'password', function (err, decoded) {
-    if (err) {
-      res.status(401).send('Unauthorized');
-      return;
-    }
-    req.admin = decoded;
-    next();
-  });
+	jwt.verify(token, "secretcode", (err, user) => {
+		console.log(err);
+
+		if (err) return res.sendStatus(403)
+
+		req.user = user
+
+		next()
+	})
 }
 
+app.use(express.json())
+app.use(express.urlencoded({ extended: false }))
+
+
+const swaggerUi = require('swagger-ui-express');
+const swaggerJsdoc = require('swagger-jsdoc');
+const options = {
+	definition: {
+		openapi: '3.0.0',
+		info: {
+			title: 'Prison Visitor Management System',
+			version: '1.0.0',
+		},
+		components:{
+			securitySchemes:{
+				jwt:{
+					type: 'http',
+					scheme: 'bearer',
+					in: "header",
+					bearerFormat: 'JWT'
+				}
+			},
+		security:[{
+			"jwt": []
+		}]
+		}
+	},
+	apis: ['./main.js'], 
+};
+const swaggerSpec = swaggerJsdoc(options);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+/**
+ * @swagger
+ * /login/user:
+ *   post:
+ *     description: User Login
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               username: 
+ *                 type: string
+ *               password: 
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Successful login
+ *       401:
+ *         description: Invalid username or password
+ */
+
+app.post('/login/user', async (req, res) => {
+	console.log(req.body);
+
+	let user = await User.login(req.body.username, req.body.password);
+	
+	if (user.status == ("invalid username" || "invalid password")) {
+		res.status(401).send("invalid username or password");
+		return
+	}
+
+
+	res.status(200).json({
+		username: user.username,
+		name: user.Name,
+		officerno: user.officerno,
+		rank: user.Rank,
+		phone: user.Phone,
+		token: generateAccessToken({ rank: user.Rank })
+
+	});
+})
+
+/**
+ * @swagger
+ * /login/visitor:
+ *   post:
+ *     description: Visitor Login
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               username: 
+ *                 type: string
+ *               password: 
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Successful login
+ *       401:
+ *         description: Invalid username or password
+ */
+
+app.post('/login/visitor', async (req, res) => {
+	console.log(req.body);
+
+	let user = await Visitor.login(req.body.username, req.body.password);
+
+	if (user.status == ("invalid username" || "invalid password")) {
+		res.status(401).send("invalid username or password");
+		return
+	}
+
+	res.status(200).json({
+		username: user.username,
+		name: user.Name,
+		age: user.Age,
+		gender: user.Gender,
+		relation: user.Relation,
+		token: generateAccessToken({ username: user.username })
+	});
+})
+
+/**
+ * @swagger
+ * /register/user:
+ *   post:
+ *     description: User Registration
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               username: 
+ *                 type: string
+ *               password: 
+ *                 type: string
+ *               name: 
+ *                 type: string
+ *               officerno:
+ *                 type: string
+ *               rank:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Successful registered
+ *       401:
+ *         description: There is an error during registration , Please try again
+ */
+
+app.post('/register/user', async (req, res) => {
+	console.log(req.body);
+	
+	const reg = await User.register(req.body.username, req.body.password, req.body.name, req.body.officerno, req.body.rank, req.body.phone);
+	console.log(reg);
+
+	res.json({reg})
+})
+
+/**
+ * @swagger
+ * /register/visitor:
+ *   post:
+ *     description: Visitor Registration
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               username: 
+ *                 type: string
+ *               password: 
+ *                 type: string
+ *               name: 
+ *                 type: string
+ *               age:
+ *                 type: integer
+ *               gender:
+ *                 type: string
+ *               relation:
+ *                 type: string
+ *               telno:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Successful registered
+ *       401:
+ *         description: There is an error during registration , Please try again
+ */
+
+app.post('/register/visitor', async (req, res) => {
+	console.log(req.body);
+
+		const reg = await Visitor.register(req.body.username, req.body.password, req.body.name, req.body.age, req.body.gender, req.body.relation, req.body.telno);
+		console.log(reg);
+	
+	res.json({reg})
+})
+
+app.use(verifyToken);
+
+/**
+ * @swagger
+ * /register/Visitorlog:
+ *   post:
+ *     security:
+ *      - jwt: []
+ *     description: Create Visitorlog
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               logno:
+ *                 type: integer
+ *               username: 
+ *                 type: string
+ *               inmateno: 
+ *                 type: string
+ *               dateofvisit:
+ *                 type: string
+ *               timein:
+ *                 type: string
+ *               timeout:
+ *                 type: string
+ *               purpose:
+ *                 type: string
+ *               officerno:
+ *                 type: string
+
+ *     responses:
+ *       200:
+ *         description: Successful registered
+ *       401:
+ *         description: There is an error during registration , Please try again
+ */
+
+
+ app.post('/register/visitorlog', async (req, res) => {
+	console.log(req.body);
+
+	if (req.user.rank == "officer" || "security"){
+		const reg = await Visitorlog.register(req.body.logno, req.body.username, req.body.inmateno, req.body.dateofvisit, req.body.timein, req.body.timeout, req.body.purpose, req.body.officerno);
+		res.status(200).send(reg)
+	}
+	else{
+		res.status(403).send("You are unauthorized")
+	}
+})
+
+/**
+ * @swagger
+ * /register/inmate:
+ *   post:
+ *     security:
+ *      - jwt: []
+ *     description: Inmate Registration
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               inmateno: 
+ *                 type: string
+ *               firstname: 
+ *                 type: string
+ *               lastname: 
+ *                 type: string
+ *               age:
+ *                 type: integer
+ *               gender:
+ *                 type: string
+ *               guilty:
+ *                 type: string
+ *              
+ *     responses:
+ *       200:
+ *         description: Successful registered
+ *       401:
+ *         description: There is an error during registration , Please try again
+ */
+
+ app.post('/register/inmate', async (req,res)=>{
+	console.log(req.body)
+
+	if (req.user.rank == "officer"){
+		const reg = await Inmate.register(req.body.inmateno, req.body.firstname, req.body.lastname, req.body.age, req.body.gender, req.body.guilty );
+		res.status(200).send(reg)
+	}
+	else{
+		res.status(403).send("You are unauthorized")
+	}
+
+})
+
+/**
+ * @swagger
+ * /user/update:
+ *   patch:
+ *     security:
+ *      - jwt: []
+ *     description: User Update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               username: 
+ *                 type: string
+ *               name: 
+ *                 type: string
+ *               officerno:
+ *                 type: string
+ *               rank:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Successful updated
+ *       401:
+ *         description: There is an error during updating , Please try again
+ */
+
+app.patch('/user/update', async (req, res) => {
+	console.log(req.body);
+
+	if (req.user.rank == "officer"){
+		const update = await User.update(req.body.username, req.body.name, req.body.officerno, req.body.rank, req.body.phone);
+		res.status(200).send(update)
+	}
+	else{
+		res.status(403).send("You are unauthorized")
+	}
+
+})
+
+/**
+ * @swagger
+ * /visitor/update:
+ *   patch:
+ *     security:
+ *      - jwt: []
+ *     description: Visitor Update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               username: 
+ *                 type: string
+ *               password: 
+ *                 type: string
+ *               name: 
+ *                 type: string
+ *               age:
+ *                 type: integer
+ *               gender:
+ *                 type: string
+ *               relation:
+ *                 type: string
+ *               telno:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Successful updated
+ *       401:
+ *         description: There is an error during updating , Please try again
+ */
+
+app.patch('/visitor/update', async (req, res) => {
+	console.log(req.body);
+
+	if (req.user.rank == "officer"){
+		const update = await Visitor.update(req.body.username, req.body.name, req.body.age, req.body.gender, req.body.relation, req.body.telno);
+		res.status(200).send(update)
+	}
+	else{
+		res.status(403).send("You are unauthorized")
+	}
+})
+
+/**
+ * @swagger
+ * /inmate/update:
+ *   patch:
+ *     security:
+ *      - jwt: []
+ *     description: Inmate Update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               inmateno: 
+ *                 type: string
+ *               firstname: 
+ *                 type: string
+ *               lastname: 
+ *                 type: string
+ *               age:
+ *                 type: integer
+ *               gender:
+ *                 type: string
+ *               guilty:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Successful updated
+ *       401:
+ *         description: There is an error during updating , Please try again
+ */
+
+ app.patch('/inmate/update', async (req, res) => {
+	console.log(req.body);
+	if (req.user.rank == "officer"){
+		const update = await Inmate.update( req.body.inmateno, req.body.firstname, req.body.lastname, req.body.age, req.body.gender, req.body.guilty);
+		res.status(200).send(update)
+	}
+	else{
+		res.status(403).send("You are unauthorized")
+	}
+})
+
+/**
+ * @swagger
+ * /visitorlog/update:
+ *   patch:
+ *     security:
+ *      - jwt: []
+ *     description: Visitorlog Update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               logno:
+ *                 type: integer
+ *               inmateno: 
+ *                 type: string
+ *               dateofvisit:
+ *                 type: string
+ *               timein:
+ *                 type: string
+ *               timeout:
+ *                 type: string
+ *               purpose:
+ *                 type: string
+ *               officerno:
+ *                 type: string
+
+ *     responses:
+ *       200:
+ *         description: Successful updated
+ *       401:
+ *         description: There is an error during updating , Please try again
+ */
+
+ app.patch('/visitorlog/update', async (req, res) => {
+	console.log(req.body);
+
+	if (req.user.username == req.body.username){
+		const update = await Visitorlog.update(req.body.logno, req.body.inmateno, req.body.dateofvisit, req.body.timein, req.body.timeout, req.body.purpose, req.body.officerno);
+		res.status(200).send(update)
+	}
+	else{
+		res.status(403).send("You are unauthorized")
+	}
+})
+
+/**
+ * @swagger
+ * /delete/user:
+ *   delete:
+ *     security:
+ *      - jwt: []
+ *     description: Delete User
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               username: 
+ *                 type: string
+ *               
+ *     responses:
+ *       200:
+ *         description: Successful delete
+ *       401:
+ *         description: There is an error during deleting , Please try again
+ */
+
+app.delete('/delete/user', async (req, res) => {
+	if (req.user.rank == "officer"){
+		const del = await User.delete(req.body.username)
+		res.status(200).send(del)
+	}
+	else{
+		res.status(403).send("You are unauthorized")
+	}
+})
+
+/**
+ * @swagger
+ * /delete/visitor:
+ *   delete:
+ *     security:
+ *      - jwt: []
+ *     description: Delete Visitor
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               username: 
+ *                 type: string
+ *               
+ *     responses:
+ *       200:
+ *         description: Successful deleted
+ *       401:
+ *         description: There is an error during deleting , Please try again
+ */
+
+app.delete('/delete/visitor', async (req, res) => {
+	if (req.user.rank == "officer"){
+		const del = await Visitor.delete(req.body.username)
+		res.status(200).send(del)
+	}
+	else{
+		res.status(403).send("You are unauthorized")
+	}
+})
+
+/**
+ * @swagger
+ * /delete/Inmate:
+ *   delete:
+ *     security:
+ *      - jwt: []
+ *     description: Delete Inmate
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               inmateno: 
+ *                 type: string
+ *               
+ *     responses:
+ *       200:
+ *         description: Successful deleted
+ *       401:
+ *         description: There is an error during deleting , Please try again
+ */
+
+ app.delete('/delete/inmate', async (req, res) => {
+	if (req.user.rank == "officer"){
+		const del = await Inmate.delete(req.body.inmateno)
+		res.status(200).send(del)
+	}
+	else{
+		res.status(403).send("You are unauthorized")
+	}
+})
+
+/**
+ * @swagger
+ * /delete/visitorlog:
+ *   delete:
+ *     security:
+ *      - jwt: []
+ *     description: Delete Visitorlog
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: 
+ *             type: object
+ *             properties:
+ *               logno: 
+ *                 type: integer
+ *               
+ *     responses:
+ *       200:
+ *         description: Successful delete
+ *       401:
+ *         description: There is an error during deleting , Please try again
+ */
+
+ app.delete('/delete/visitorlog', async (req, res) => {
+	if (req.user.rank == "officer" || "security"){
+		const del = await Visitorlog.delete(req.body.logno)
+		res.status(200).send(del)
+	}
+	else{
+		res.status(403).send("You are unauthorized")
+	}
+})
+
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
-});
-
-app.post('/create/customer/admin', verifyToken, async (req, res) => {
-  let result = createcustomer(
-    req.body.customername,
-    req.body.idproof
-  ); 
-  res.send(result);
-});
-
-app.post('/add/sensor',async(req,res)=>{
-  let result = addsensor(
-    req.body.sensor,
-    req.body.date,
-    req.body.time,
-    req.body.value,
-    req.body.id,
-    req.body.name
-  );
-  res.send(result) 
-});
-
-function addsensor(reqsensor, reqdate, reqtime, reqvalue, reqname, reqidproof) {
-  client.db().collection().insertMany({
-      "sensor": reqsensor,
-      "date": reqdate,
-      "time": reqtime,
-      "value": reqvalue,
-      "name": reqname,
-      "id": reqidproof
-
-    });
-    return "sensor added";
-  }
-
-app.patch('/update/value/:id',async(req,res)=>{
-  const search = req.params.id;
-  const value = req.body.value;
-  await client.db().collection().updateOne({id: search},{$set:value});
-}) 
+	console.log(`Example app listening at http://localhost:${port}`)
+})
