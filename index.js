@@ -7,7 +7,8 @@ const Visitorlog = require("./visitorlog")
 
 MongoClient.connect(
 	// TODO: Connection 
-	"mongodb+srv://m001-student:Dan_2218@sandbox.yldg8.mongodb.net/    ", 
+	//"mongodb+srv://m001-student:Dan_2218@sandbox.yldg8.mongodb.net/    ", 
+	"mongodb+srv://danial:779hRsy0RVMRRRlP@gulag0.ij0pzbn.mongodb.net/?retryWrites=true&w=majority",
 	{ useNewUrlParser: true },
 ).catch(err => {
 	console.error(err.stack)
