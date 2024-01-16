@@ -2,7 +2,7 @@ const MongoClient = require("mongodb").MongoClient;
 const User = require("./user");
 const Visitor = require("./visitor.js");
 const Inmate = require("./inmate");
-const Visitorlog = require("./visitorlog")
+const Visitorlog = require("./visitorlog.js")
 
 
 MongoClient.connect(
@@ -27,7 +27,7 @@ const port = process.env.PORT || 3030
 
 const jwt = require ('jsonwebtoken');
 function generateAccessToken(payload){
-	return jwt.sign(payload, "secretcode", { expiresIn: '7d' });
+	return jwt.sign(payload, "secretcode", { expiresIn: '2m' }); //expiration can be 'd' (day), 'h' (hour), 'm' (minute), 's' (second)
 }
 
 function verifyToken(req, res, next) {
@@ -58,7 +58,7 @@ const options = {
 		openapi: '3.0.0',
 		info: {
 			title: 'Prison Visitor Management System',
-			version: '1.0.0',
+			version: '1.0.11',
 		},
 		components:{
 			securitySchemes:{
@@ -81,9 +81,65 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 /**
  * @swagger
+ * /retrieve/visitorpass:
+ *   get:
+ *     summary: Retrieve Issued Visitor Pass
+ *     tags:
+ *       - Visitor
+ *     description: Retrieve issued visitor pass by entering inmate's name
+ *     parameters:
+ *       - in: query
+ *         name: inmateName
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Visitor pass retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Visitor pass not found
+ *       500:
+ *         description: Internal server error
+ */
+
+  app.get('/retrieve/visitorpass', async (req, res) => {
+	try {
+	  // Check if the user is a visitor
+	  if (req.user.rank === 'visitor') {
+		const inmateName = req.query.inmateName;
+  
+		// Add logic to retrieve the visitor pass based on the inmate's name
+		const retrievedPass = await Visitorlog.retrieveVisitorPass(inmateName);
+  
+		if (retrievedPass) {
+		  res.status(200).json({ status: 'Visitor pass retrieved successfully', retrievedPass });
+		} else {
+		  res.status(404).json({ error: 'Visitor pass not found' });
+		}
+	  } else {
+		res.status(403).send('You are unauthorized');
+	  }
+	} catch (error) {
+	  console.error(error);
+	  res.status(500).json({ error: 'Internal server error' });
+	}
+  });
+
+
+/**
+ * @swagger
  * /login/user:
  *   post:
+ *     summary : login to account
+ *     security:
+ *      - jwt: []
  *     description: User Login
+ *     tags:
+ *     - System
  *     requestBody:
  *       required: true
  *       content:
@@ -124,54 +180,63 @@ app.post('/login/user', async (req, res) => {
 	});
 })
 
-/**
- * @swagger
- * /login/visitor:
- *   post:
- *     description: Visitor Login
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: 
- *             type: object
- *             properties:
- *               username: 
- *                 type: string
- *               password: 
- *                 type: string
- *     responses:
- *       200:
- *         description: Successful login
- *       401:
- *         description: Invalid username or password
- */
+// /**
+//  * @swagger
+//  * /login/visitor:
+//  *   post:
+//  *     summary : Visitor Account Login
+//  *     description: Visitor Login
+//  *     tags: 
+//  *     - Visitor
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema: 
+//  *             type: object
+//  *             properties:
+//  *               username: 
+//  *                 type: string
+//  *               password: 
+//  *                 type: string
+//  *     responses:
+//  *       200:
+//  *         description: Successful login
+//  *       401:
+//  *         description: Invalid username or password
+//  */
 
-app.post('/login/visitor', async (req, res) => {
-	console.log(req.body);
+// app.post('/login/visitor', async (req, res) => {
+// 	console.log(req.body);
 
-	let user = await Visitor.login(req.body.username, req.body.password);
+// 	let user = await Visitor.login(req.body.username, req.body.password);
 
-	if (user.status == ("invalid username" || "invalid password")) {
-		res.status(401).send("invalid username or password");
-		return
-	}
+// 	if (user.status == ("invalid username" || "invalid password")) {
+// 		res.status(401).send("invalid username or password");
+// 		return
+// 	}
 
-	res.status(200).json({
-		username: user.username,
-		name: user.Name,
-		age: user.Age,
-		gender: user.Gender,
-		relation: user.Relation,
-		token: generateAccessToken({ username: user.username })
-	});
-})
+// 	res.status(200).json({
+// 		username: user.username,
+// 		name: user.Name,
+// 		age: user.Age,
+// 		gender: user.Gender,
+// 		relation: user.Relation,
+// 		token: generateAccessToken({ username: user.username })
+// 	});
+// })
 
+//--------------------REGISTER OFFICER (USER)--------------------
 /**
  * @swagger
  * /register/user:
  *   post:
+ *     summary : User Account Registration
+ *     security:
+ *      - jwt: []
  *     description: User Registration
+ *     tags:
+ *     - Admin
  *     requestBody:
  *       required: true
  *       content:
@@ -207,57 +272,63 @@ app.post('/register/user', async (req, res) => {
 	res.json({reg})
 })
 
-/**
- * @swagger
- * /register/visitor:
- *   post:
- *     description: Visitor Registration
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: 
- *             type: object
- *             properties:
- *               username: 
- *                 type: string
- *               password: 
- *                 type: string
- *               name: 
- *                 type: string
- *               age:
- *                 type: integer
- *               gender:
- *                 type: string
- *               relation:
- *                 type: string
- *               telno:
- *                 type: string
- *     responses:
- *       200:
- *         description: Successful registered
- *       401:
- *         description: There is an error during registration , Please try again
- */
+// /**
+//  * @swagger
+//  * /register/visitor:
+//  *   post:
+//  *     summary : Visitor Account Registration
+//  *     description: Visitor Registration
+//  *     tags:
+//  *     - Visitor
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema: 
+//  *             type: object
+//  *             properties:
+//  *               username: 
+//  *                 type: string
+//  *               password: 
+//  *                 type: string
+//  *               name: 
+//  *                 type: string
+//  *               age:
+//  *                 type: integer
+//  *               gender:
+//  *                 type: string
+//  *               relation:
+//  *                 type: string
+//  *               telno:
+//  *                 type: string
+//  *     responses:
+//  *       200:
+//  *         description: Successful registered
+//  *       401:
+//  *         description: There is an error during registration , Please try again
+//  */
 
-app.post('/register/visitor', async (req, res) => {
-	console.log(req.body);
+// app.post('/register/visitor', async (req, res) => {
+// 	console.log(req.body);
 
-		const reg = await Visitor.register(req.body.username, req.body.password, req.body.name, req.body.age, req.body.gender, req.body.relation, req.body.telno);
-		console.log(reg);
+// 		const reg = await Visitor.register(req.body.username, req.body.password, req.body.name, req.body.age, req.body.gender, req.body.relation, req.body.telno);
+// 		console.log(reg);
 	
-	res.json({reg})
-})
+// 	res.json({reg})
+// })
 
-app.use(verifyToken);
+// app.use(verifyToken);
 
 /**
  * @swagger
- * /register/Visitorlog:
+ * /create/visitorpass:
  *   post:
+ *     summary : VisitorPass Creation
  *     security:
  *      - jwt: []
- *     description: Create Visitorlog
+ *     tags:
+ *     - User
+ *     description: Create VisitorPass
  *     requestBody:
  *       required: true
  *       content:
@@ -290,7 +361,7 @@ app.use(verifyToken);
  */
 
 
- app.post('/register/visitorlog', async (req, res) => {
+ app.post('/create/visitorpass', async (req, res) => {
 	console.log(req.body);
 
 	if (req.user.rank == "officer" || "security"){
@@ -306,8 +377,11 @@ app.use(verifyToken);
  * @swagger
  * /register/inmate:
  *   post:
+ *   summary : Inmate Registration
  *     security:
  *      - jwt: []
+ *     tags:
+ *     - User
  *     description: Inmate Registration
  *     requestBody:
  *       required: true
@@ -349,298 +423,301 @@ app.use(verifyToken);
 
 })
 
+// /**
+//  * @swagger
+//  * /user/update:
+//  *   patch:
+//  *     security:
+//  *      - jwt: []
+//  *     description: User Update
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema: 
+//  *             type: object
+//  *             properties:
+//  *               username: 
+//  *                 type: string
+//  *               name: 
+//  *                 type: string
+//  *               officerno:
+//  *                 type: string
+//  *               rank:
+//  *                 type: string
+//  *               phone:
+//  *                 type: string
+//  *     responses:
+//  *       200:
+//  *         description: Successful updated
+//  *       401:
+//  *         description: There is an error during updating , Please try again
+//  */
+
+// app.patch('/user/update', async (req, res) => {
+// 	console.log(req.body);
+
+// 	if (req.user.rank == "officer"){
+// 		const update = await User.update(req.body.username, req.body.name, req.body.officerno, req.body.rank, req.body.phone);
+// 		res.status(200).send(update)
+// 	}
+// 	else{
+// 		res.status(403).send("You are unauthorized")
+// 	}
+
+// })
+
+// /**
+//  * @swagger
+//  * /visitor/update:
+//  *   patch:
+//  *     security:
+//  *      - jwt: []
+//  *     description: Visitor Update
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema: 
+//  *             type: object
+//  *             properties:
+//  *               username: 
+//  *                 type: string
+//  *               password: 
+//  *                 type: string
+//  *               name: 
+//  *                 type: string
+//  *               age:
+//  *                 type: integer
+//  *               gender:
+//  *                 type: string
+//  *               relation:
+//  *                 type: string
+//  *               telno:
+//  *                 type: string
+//  *     responses:
+//  *       200:
+//  *         description: Successful updated
+//  *       401:
+//  *         description: There is an error during updating , Please try again
+//  */
+
+// app.patch('/visitor/update', async (req, res) => {
+// 	console.log(req.body);
+
+// 	if (req.user.rank == "officer"){
+// 		const update = await Visitor.update(req.body.username, req.body.name, req.body.age, req.body.gender, req.body.relation, req.body.telno);
+// 		res.status(200).send(update)
+// 	}
+// 	else{
+// 		res.status(403).send("You are unauthorized")
+// 	}
+// })
+
+// /**
+//  * @swagger
+//  * /inmate/update:
+//  *   patch:
+//  *     security:
+//  *      - jwt: []
+//  *     description: Inmate Update
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema: 
+//  *             type: object
+//  *             properties:
+//  *               inmateno: 
+//  *                 type: string
+//  *               firstname: 
+//  *                 type: string
+//  *               lastname: 
+//  *                 type: string
+//  *               age:
+//  *                 type: integer
+//  *               gender:
+//  *                 type: string
+//  *               guilty:
+//  *                 type: string
+//  *     responses:
+//  *       200:
+//  *         description: Successful updated
+//  *       401:
+//  *         description: There is an error during updating , Please try again
+//  */
+
+//  app.patch('/inmate/update', async (req, res) => {
+// 	console.log(req.body);
+// 	if (req.user.rank == "officer"){
+// 		const update = await Inmate.update( req.body.inmateno, req.body.firstname, req.body.lastname, req.body.age, req.body.gender, req.body.guilty);
+// 		res.status(200).send(update)
+// 	}
+// 	else{
+// 		res.status(403).send("You are unauthorized")
+// 	}
+// })
+
+// /**
+//  * @swagger
+//  * /VisitorPass/update:
+//  *   patch:
+//  *     security:
+//  *      - jwt: []
+//  *     description: Visitorlog Update
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema: 
+//  *             type: object
+//  *             properties:
+//  *               logno:
+//  *                 type: integer
+//  *               inmateno: 
+//  *                 type: string
+//  *               dateofvisit:
+//  *                 type: string
+//  *               timein:
+//  *                 type: string
+//  *               timeout:
+//  *                 type: string
+//  *               purpose:
+//  *                 type: string
+//  *               officerno:
+//  *                 type: string
+
+//  *     responses:
+//  *       200:
+//  *         description: Successful updated
+//  *       401:
+//  *         description: There is an error during updating , Please try again
+//  */
+
+//  app.patch('/visitorlog/update', async (req, res) => {
+// 	console.log(req.body);
+
+// 	if (req.user.username == req.body.username){
+// 		const update = await Visitorlog.update(req.body.logno, req.body.inmateno, req.body.dateofvisit, req.body.timein, req.body.timeout, req.body.purpose, req.body.officerno);
+// 		res.status(200).send(update)
+// 	}
+// 	else{
+// 		res.status(403).send("You are unauthorized")
+// 	}
+// })
+
+// /**
+//  * @swagger
+//  * /delete/user:
+//  *   delete:
+//  *     security:
+//  *      - jwt: []
+//  *     description: Delete User
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema: 
+//  *             type: object
+//  *             properties:
+//  *               username: 
+//  *                 type: string
+//  *               
+//  *     responses:
+//  *       200:
+//  *         description: Successful delete
+//  *       401:
+//  *         description: There is an error during deleting , Please try again
+//  */
+
+// app.delete('/delete/user', async (req, res) => {
+// 	if (req.user.rank == "officer"){
+// 		const del = await User.delete(req.body.username)
+// 		res.status(200).send(del)
+// 	}
+// 	else{
+// 		res.status(403).send("You are unauthorized")
+// 	}
+// })
+
+// /**
+//  * @swagger
+//  * /delete/visitor:
+//  *   delete:
+//  *     security:
+//  *      - jwt: []
+//  *     description: Delete Visitor
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema: 
+//  *             type: object
+//  *             properties:
+//  *               username: 
+//  *                 type: string
+//  *               
+//  *     responses:
+//  *       200:
+//  *         description: Successful deleted
+//  *       401:
+//  *         description: There is an error during deleting , Please try again
+//  */
+
+// app.delete('/delete/visitor', async (req, res) => {
+// 	if (req.user.rank == "officer"){
+// 		const del = await Visitor.delete(req.body.username)
+// 		res.status(200).send(del)
+// 	}
+// 	else{
+// 		res.status(403).send("You are unauthorized")
+// 	}
+// })
+
+// /**
+//  * @swagger
+//  * /delete/Inmate:
+//  *   delete:
+//  *     security:
+//  *      - jwt: []
+//  *     description: Delete Inmate
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema: 
+//  *             type: object
+//  *             properties:
+//  *               inmateno: 
+//  *                 type: string
+//  *               
+//  *     responses:
+//  *       200:
+//  *         description: Successful deleted
+//  *       401:
+//  *         description: There is an error during deleting , Please try again
+//  */
+
+//  app.delete('/delete/inmate', async (req, res) => {
+// 	if (req.user.rank == "officer"){
+// 		const del = await Inmate.delete(req.body.inmateno)
+// 		res.status(200).send(del)
+// 	}
+// 	else{
+// 		res.status(403).send("You are unauthorized")
+// 	}
+// })
+
 /**
  * @swagger
- * /user/update:
- *   patch:
- *     security:
- *      - jwt: []
- *     description: User Update
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: 
- *             type: object
- *             properties:
- *               username: 
- *                 type: string
- *               name: 
- *                 type: string
- *               officerno:
- *                 type: string
- *               rank:
- *                 type: string
- *               phone:
- *                 type: string
- *     responses:
- *       200:
- *         description: Successful updated
- *       401:
- *         description: There is an error during updating , Please try again
- */
-
-app.patch('/user/update', async (req, res) => {
-	console.log(req.body);
-
-	if (req.user.rank == "officer"){
-		const update = await User.update(req.body.username, req.body.name, req.body.officerno, req.body.rank, req.body.phone);
-		res.status(200).send(update)
-	}
-	else{
-		res.status(403).send("You are unauthorized")
-	}
-
-})
-
-/**
- * @swagger
- * /visitor/update:
- *   patch:
- *     security:
- *      - jwt: []
- *     description: Visitor Update
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: 
- *             type: object
- *             properties:
- *               username: 
- *                 type: string
- *               password: 
- *                 type: string
- *               name: 
- *                 type: string
- *               age:
- *                 type: integer
- *               gender:
- *                 type: string
- *               relation:
- *                 type: string
- *               telno:
- *                 type: string
- *     responses:
- *       200:
- *         description: Successful updated
- *       401:
- *         description: There is an error during updating , Please try again
- */
-
-app.patch('/visitor/update', async (req, res) => {
-	console.log(req.body);
-
-	if (req.user.rank == "officer"){
-		const update = await Visitor.update(req.body.username, req.body.name, req.body.age, req.body.gender, req.body.relation, req.body.telno);
-		res.status(200).send(update)
-	}
-	else{
-		res.status(403).send("You are unauthorized")
-	}
-})
-
-/**
- * @swagger
- * /inmate/update:
- *   patch:
- *     security:
- *      - jwt: []
- *     description: Inmate Update
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: 
- *             type: object
- *             properties:
- *               inmateno: 
- *                 type: string
- *               firstname: 
- *                 type: string
- *               lastname: 
- *                 type: string
- *               age:
- *                 type: integer
- *               gender:
- *                 type: string
- *               guilty:
- *                 type: string
- *     responses:
- *       200:
- *         description: Successful updated
- *       401:
- *         description: There is an error during updating , Please try again
- */
-
- app.patch('/inmate/update', async (req, res) => {
-	console.log(req.body);
-	if (req.user.rank == "officer"){
-		const update = await Inmate.update( req.body.inmateno, req.body.firstname, req.body.lastname, req.body.age, req.body.gender, req.body.guilty);
-		res.status(200).send(update)
-	}
-	else{
-		res.status(403).send("You are unauthorized")
-	}
-})
-
-/**
- * @swagger
- * /visitorlog/update:
- *   patch:
- *     security:
- *      - jwt: []
- *     description: Visitorlog Update
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: 
- *             type: object
- *             properties:
- *               logno:
- *                 type: integer
- *               inmateno: 
- *                 type: string
- *               dateofvisit:
- *                 type: string
- *               timein:
- *                 type: string
- *               timeout:
- *                 type: string
- *               purpose:
- *                 type: string
- *               officerno:
- *                 type: string
-
- *     responses:
- *       200:
- *         description: Successful updated
- *       401:
- *         description: There is an error during updating , Please try again
- */
-
- app.patch('/visitorlog/update', async (req, res) => {
-	console.log(req.body);
-
-	if (req.user.username == req.body.username){
-		const update = await Visitorlog.update(req.body.logno, req.body.inmateno, req.body.dateofvisit, req.body.timein, req.body.timeout, req.body.purpose, req.body.officerno);
-		res.status(200).send(update)
-	}
-	else{
-		res.status(403).send("You are unauthorized")
-	}
-})
-
-/**
- * @swagger
- * /delete/user:
+ * /delete/VisitorPass:
  *   delete:
+ *     summary : Delete VisitorPass
  *     security:
  *      - jwt: []
- *     description: Delete User
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: 
- *             type: object
- *             properties:
- *               username: 
- *                 type: string
- *               
- *     responses:
- *       200:
- *         description: Successful delete
- *       401:
- *         description: There is an error during deleting , Please try again
- */
-
-app.delete('/delete/user', async (req, res) => {
-	if (req.user.rank == "officer"){
-		const del = await User.delete(req.body.username)
-		res.status(200).send(del)
-	}
-	else{
-		res.status(403).send("You are unauthorized")
-	}
-})
-
-/**
- * @swagger
- * /delete/visitor:
- *   delete:
- *     security:
- *      - jwt: []
- *     description: Delete Visitor
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: 
- *             type: object
- *             properties:
- *               username: 
- *                 type: string
- *               
- *     responses:
- *       200:
- *         description: Successful deleted
- *       401:
- *         description: There is an error during deleting , Please try again
- */
-
-app.delete('/delete/visitor', async (req, res) => {
-	if (req.user.rank == "officer"){
-		const del = await Visitor.delete(req.body.username)
-		res.status(200).send(del)
-	}
-	else{
-		res.status(403).send("You are unauthorized")
-	}
-})
-
-/**
- * @swagger
- * /delete/Inmate:
- *   delete:
- *     security:
- *      - jwt: []
- *     description: Delete Inmate
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: 
- *             type: object
- *             properties:
- *               inmateno: 
- *                 type: string
- *               
- *     responses:
- *       200:
- *         description: Successful deleted
- *       401:
- *         description: There is an error during deleting , Please try again
- */
-
- app.delete('/delete/inmate', async (req, res) => {
-	if (req.user.rank == "officer"){
-		const del = await Inmate.delete(req.body.inmateno)
-		res.status(200).send(del)
-	}
-	else{
-		res.status(403).send("You are unauthorized")
-	}
-})
-
-/**
- * @swagger
- * /delete/visitorlog:
- *   delete:
- *     security:
- *      - jwt: []
- *     description: Delete Visitorlog
+ *     tags:
+ *     - User
+ *     description: Delete VisitorPass
  *     requestBody:
  *       required: true
  *       content:
@@ -658,7 +735,7 @@ app.delete('/delete/visitor', async (req, res) => {
  *         description: There is an error during deleting , Please try again
  */
 
- app.delete('/delete/visitorlog', async (req, res) => {
+ app.delete('/delete/visitorpass', async (req, res) => {
 	if (req.user.rank == "officer" || "security"){
 		const del = await Visitorlog.delete(req.body.logno)
 		res.status(200).send(del)
